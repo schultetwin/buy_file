@@ -1,0 +1,5 @@
+name = Buy File
+description = "Simple module to buy a file"
+core = 6.x
+package = Other
+dependencies[] = lm_paypal

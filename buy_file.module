@@ -1,0 +1,415 @@
+<?php
+/**
+ * Implementation of hook_perm
+ * Note all purchasable files will allow to access all purchasable files
+ * 
+ * 
+ */
+function buy_file_perm() {
+  return array('administer buy file', 'access all purchasable files');
+}
+
+/**
+ * Implementation of hook_menu
+ * 
+ * Defines menu item for form from which to download files. All
+ * files will redirect to this form if in the proper directory.
+ * 
+ * First menu item calls the form to POST to paypal. User must be
+ * logged in to view this form. % = file id (fid)
+ * 
+ * Second menu item calls a form to allow the user to select a file
+ * download. This allows the user to select a download even if they
+ * didn't select to download it directly from a file.
+ * 
+ * The third menu item is a thank you page. The page displays files to
+ * be downloaded and a thank you notice. I would like to move this to a
+ * user by user implementation.
+ * 
+ * Lastly, I define the path to our settings table, in the
+ * menu.admin.inc file in the include folder.
+ */
+function buy_file_menu() {
+  $items = array();
+  $items['purchase/files/%'] = array(
+  	'title' => 'Purchase Files',
+  	'page callback' => 'drupal_get_form',
+  	'page arguments' => array('buy_file_purchase_form', 2),
+  	'access arguments' => array('access content'),
+  	'type' => MENU_CALLBACK,
+  );
+  $items['purchase/files'] = array(
+    'title' => 'Select Files',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('buy_file_select_file_form'),
+    'access arguments' => array('access content'),
+    'type' => MENU_CALLBACK,
+  );
+  $items['user/%user/file_downloads'] = array(
+    'title' => 'Available Downloads',
+    'page callback' => 'buy_file_thank_you',
+    'page arguments' => array(1),
+    'access callback' => 'user_view_access',
+    'access arguments' => array(1),
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/settings/buy-files'] = array(
+    'title' => 'Buy File Settings',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('buy_file_admin_form'),
+    'access arguments' => array('administer buy file'),
+    'file' => 'includes/menu.admin.inc',
+    'type' => NORMAL_MENU_ITEM,
+  );
+  return $items;
+}
+
+/**
+ * Implementation of hook_lm_paypal_ipn($ipn)
+ * 
+ * Takes the ipn passed back by paypal, takes custom data (which is 
+ * fid and uid) and uses buy_file_add to add that uid permission to
+ * download that file (based on fid)
+ */
+function buy_file_lm_paypal_ipn($ipn) {
+  $custom = $ipn->custom;
+  $custom = unserialize($custom);
+  $uid = $custom['uid'];
+  $fid = $custom['fid'];
+  buy_file_add($uid,$fid);
+  return TRUE;
+}
+
+/**
+ * Implemenation of hook_menu_alter(&$items)
+ * 
+ * Fix implementation with private download. If this isn't implemented
+ * you wouldn't have access to files without permissions to 'acess 
+ * private download files'.
+ */
+function buy_file_menu_alter(&$items) {
+  if (module_exists('private_download')) {
+    $items['system/files/%']['access arguments'] = array('access content');
+  }
+}
+
+/**
+ * Defines the select form to allow users to select the file they would
+ * like to download if they didn't just click on it directly. If the
+ * directory in which to buy files is not set, then it will select
+ * all files.
+ * 
+ * Return $form (array)
+ */
+
+function buy_file_select_file_form($form_state = array()) {
+  $options = array();
+  $path = variable_get('buy_file_file_directory','');
+  if ($path) {
+    $sql = 'SELECT fid,filename,filepath FROM {files} WHERE filepath LIKE "%%%s%%"';
+    $result = db_query($sql,$path);
+  }else{
+    $sql = 'SELECT fid,filename,filepath FROM {files}';
+    $result = db_query($sql);
+  }
+  while ($file = db_fetch_object($result)) {
+    $options[$file->fid] = $file->filename;
+  }
+  
+  $form = array();
+  // Display error if no downloadable files
+  if (!$result) {
+    $form['error'] = array(
+      '#type' => 'markup',
+      '#value' => t('No Downloadable files'),
+    );
+  }
+  $form['file'] = array(
+    '#type' => 'select',
+    '#title' => t('Select File'),
+    '#options' => $options,
+    '#required' => TRUE,
+  );
+  $form['sumbit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Select File'),
+  );
+  return $form;
+}
+/**
+ * Declares what to do on submitting the previous form. You should
+ * redirect user to the form to download file (go to paypal)
+ */
+
+function buy_file_select_file_form_submit($form, &$form_state) {
+  $fid = $form_state['values']['file'];
+  $form_state['redirect'] = 'purchase/files/' . $fid;
+}
+
+/**
+ * Create form to buy files.
+ * 
+ * User is redirected to this page through the hook_file_download
+ * function defined in this module.
+ * 
+ * $fid (int) The file id of the file you want to purchase.
+ * 
+ * return $form (array)
+ * 
+ * Uses lm_paypal_api_payment_form form builder. See lm_paypal for more
+ * information on that form.
+ */
+function buy_file_purchase_form($form_state, $fid = NULL) {
+  global $user;
+  
+  // If arg $fid is not defined, check for arg in url and set it if possible
+  if (!$fid && is_numeric(arg(2))) {
+    $fid = arg(2);
+  }
+  
+  // We do not support anonymous purchases (yet). User must be logged in.
+  // Display a helpful error if the user is not logged in.
+  if (!$user->uid) {
+    $message_args = array(
+      '@url' => url('user/login', array('query' => 'destination=purchase/files/' . $fid, 'absolute' => TRUE)), 
+      '@reg' => url('user/register', array('query' => 'destination=purchase/files/' . $fid, 'absolute' => TRUE))
+    );
+    drupal_set_message(t('You must <a href="@url">login</a> or <a href="@reg">register</a> to download a file', $message_args));
+    return;
+  }
+  
+  // Set the file id of the file to download now if it is set, or build
+  // a different form to select the file.
+  if (!is_numeric($fid)) {
+    drupal_set_message('Must select file');
+    drupal_goto('purchase/files');
+  }
+  
+  // If price is not set, do not build form. Price must first be set
+  // Display error for admin.
+  if (!variable_get('file_cost','')) {
+    if (user_access('administer buy file')) {
+      drupal_set_message(t('You must set a price <a href="@url">here</a>', array('@url' => url('admin/settings/buy-files', array('absolute' => TRUE)))), 'error');
+    }else{
+      drupal_set_message(t('Proper settings have not yet been configured for buy file, please contact a site admin'),'error');
+    }
+    return;
+  }
+  
+  // SQL for building filepath and  file name for file.
+  $sql = 'SELECT filepath,filename FROM {files} WHERE fid = %d';
+  $result = db_query($sql,$fid);
+  $file = db_fetch_object($result);
+  $filepath = file_create_path($file->filepath);
+  
+  // Don't allow user to accidentally download a file twice. If they have
+  // paid for the file, but not download it yet, allow them to download it.
+  if (buy_file_downloadable($user->uid,$fid)) {
+    $output = '<p>' . variable_get('buy_file_repurchase',t('You have already bought this file, but have not yet downloaded it.')) . '</p>';
+    $output .= '<p>' . l('Download here', $filepath) . '</p>';
+    drupal_set_message($output,'warning');
+  }
+  
+  // If user has permissions to download all files, let them know that
+  // and provide helpful error
+  if (user_access('access all purchasable files',$user)) {
+    $output = '<p>' . variable_get('buy_file_has_permission',t('You have subscribed to our site and may download this file for free.')) . '</p>';
+    $output .= '<p>' . l('Download here', $filepath) . '</p>';
+    drupal_set_message($output,'warning');
+  }
+  $filename = $file->filename;
+  $price = variable_get('file_cost',1);
+  
+  // Set parameters to send to paypal.com. Documentation available from
+  // lm_paypal module.
+  $options = array();
+  $option['display_amount'] = '<p>' . t('This file cost @price. You must return to this website to download the purchased file.', array(
+          '@price' => theme('lm_paypal_amount', $valid_amount, $currency, TRUE),
+        )) . '</p>';
+  $options['item_name'] = 'File Download: ' . $filename;
+  $options['item_number'] = $fid;
+  $options['currency'] = 'USD';
+  $options['return_path'] = 'user/' . $user->uid .'/file_downloads';
+  $custom = array(
+    'uid' => $user->uid,
+    'fid' => $fid,
+  );
+  $options['custom'] = $custom;
+  $custom = serialize($custom);
+  
+  $form = lm_paypal_api_payment_form($form_state, $price, $options);
+  
+  $form['cbt'] = array(
+    '#type' => 'hidden',
+    '#access' => FALSE,
+    '#value' => "Return to the site for your download",
+    '#name' => 'cbt',
+  );
+  
+  $form['custom']['#value'] = $custom;
+  $form['amount_display']['#value'] = '<p>' . t('This file cost $@price. You must return to this website to download the purchased file.', array(
+          '@price' => $price)) . '</p>';
+  return $form;
+}
+
+/**
+ * Page callback for a thank you page.
+ * 
+ * return $output
+ * 
+ * THIS SHOULD BE UPDATED TO INCLUDE VIEWS!!!!
+ */
+function buy_file_thank_you($user) {
+  $uid = $user->uid;
+  $output = '<p>'. variable_get('buy_file_thank_you',t('Thank you for buying from us')) .'</p>';
+  $files = buy_file_get($uid);
+  foreach($files as $fid => $fileinfo) {
+    if ($fileinfo['downloadable'] == 1) {
+      $path = file_create_path($fileinfo['filepath']);
+      $output .= '<p>' . t('You may download your file, @name, <a href="@url">here</a>.', array('@name' => t($fileinfo['filename']), '@url' => url($path))) .'</p>';
+    }
+  }
+  if (!$path) {
+    $output = '<p>' . variable_get('buy_file_no_purchased_download',t('You have no current available downloads')) . '</p>';
+  }
+  
+  return $output;
+}
+
+/**
+ * Implementation of hook_file_download
+ * Determine if file is in the proper directory.
+ * If it is, use a function to check to see if user can download it..
+ * If not, redirect to buy_file form.
+ */
+
+function buy_file_file_download($filepath) {
+  global $user;
+  // Check if in purchase directory enabled.
+  // If it is, this only works in private files.
+  $private_dir = variable_get('buy_file_file_directory', '');
+  $file_args = explode('/', $filepath);
+  if ($file_args[0] != $private_dir) {
+    return;
+  }
+  $filepath = file_create_path($filepath);
+  $result = db_query("SELECT f.* FROM {files} f WHERE f.filepath = '%s'", $filepath);
+  $file = db_fetch_object($result);
+  if ($file) {
+    $fid = $file->fid;
+    if ($user->uid) {
+      if (buy_file_downloadable($user->uid,$fid)) {
+        buy_file_remove($user->uid,$fid);
+        return array(
+          'Content-Type: ' . $file->filemime,
+          'Content-Length: ' . $file->filesize,
+        );
+      }
+      
+      if (user_access('access all purchasable files')) {
+        return array(
+          'Content-Type: ' . $file->filemime,
+          'Content-Length: ' . $file->filesize,
+        );
+      }
+    }
+    drupal_goto('purchase/files/' . $fid);
+  }
+  return;
+}
+
+/**
+ * Implementation of hook_file_user
+ * 
+ * If user is deleted we should delete all file downloads from that user.
+ */
+function buy_file_user($op, &$edit, &$account, $category = NULL) {
+  switch ($op) {
+    case delete:
+      $sql = 'DELETE FROM {user_file_download} WHERE uid = %d';
+      $uid = $account->uid;
+      $result = db_query($sql,$uid);
+      if (!$result) {
+      	drupal_set_message('Error deleting file download history','error');
+      }
+      break;
+  }
+}
+
+/**
+ * Helpful api function to get all file downloads for a user.
+ * 
+ * @param $uid (int) User id. Allows us to filter our results.
+ * 
+ * return Weird array of file information and user information. Should
+ * probably clean this up a little bit.
+ */
+function buy_file_get($uid) {
+  $results = db_query('SELECT u.fid,f.filename,f.filepath,u.downloadable FROM {user_file_download} u LEFT JOIN {files} f ON u.fid = f.fid WHERE u.uid = %d', $uid);
+  $files = array();
+  while ($file = db_fetch_array($results)) {
+    $files[$file['fid']] = $file;
+  }
+  return $files;
+}
+
+/**
+ * Function to give user permission to download file.
+ * @param $uid = user id of who to give permission
+ * @param $fid = fid of which to allow user to download
+ * 
+ * return NULL
+ */
+function buy_file_add($uid,$fid) {
+  // Test to see if record already exists
+  $files = buy_file_get($uid);
+  if (array_key_exists($fid, $files)) {
+    drupal_set_message("UPDATE");
+    $sql = 'UPDATE {user_file_download} SET downloadable = %d WHERE uid = %d AND fid = %d';
+    $result = db_query($sql, 1, $uid, $fid);
+    $method = 'update';
+  }else{
+    drupal_set_message("INSERT");
+    $sql = 'INSERT INTO {user_file_download} (downloadable, uid, fid) VALUES (%d, %d, %d)';
+    $result = db_query($sql, 1, $uid, $fid);
+    $method = 'insert';
+  }
+  if (!$result) {
+    drupal_set_message('Error' . $method . 'ing file access for user ' . $uid,'error');
+  }
+}
+
+/**
+ * Function to remove a users permission to download a file from the database.
+ * 
+ * @param $uid = User id of which to remove permission
+ * @param $fid = File if of which to no longer allow user to download
+ * 
+ * return null;
+ */
+function buy_file_remove($uid,$fid) {
+  $sql = 'UPDATE {user_file_download} SET downloadable = %d WHERE uid = %d AND fid = %d';
+  $result = db_query($sql,0,$uid,$fid);
+  if (!$result) {
+    drupal_set_message('Error removing user access to file','error');
+  }
+}
+
+/**
+ * Function to test of a file is downloadable by certain user.
+ * 
+ * @param $uid = User id to check
+ * @param $fid = File id to check
+ * 
+ * return TRUE/FALSE
+ */
+function buy_file_downloadable($uid,$fid) {
+  $sql = 'SELECT downloadable FROM {user_file_download} WHERE uid = %d and fid = %d';
+  $result = db_query($sql,$uid,$fid);
+  $down = db_fetch_object($result);
+  if ($down->downloadable) {
+    return TRUE;
+  }else{
+    return FALSE;
+  }
+}

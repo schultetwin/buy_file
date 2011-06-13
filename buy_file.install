@@ -1,0 +1,62 @@
+<?php
+function buy_file_schema() {
+  $schema['user_file_download'] = array(
+    'description' => 'Lists files {files} and users {users} that can download',
+    'fields' => array(
+      'order_id' => array(
+        'description' => 'Order id for order information',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'fid' => array(
+        'description' => 'File id {files}.fid of file to download',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'uid' => array(
+        'description' => 'User id who downloaded file. {users}.uid',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'downloadable' => array(
+        'description' => 'True false value to allow you to download',
+        'type' => 'int',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'indexes' => array(
+      'fid' => array('fid'),
+      'uid' => array('uid'),
+    ),
+    'primary key' => array('order_id'),
+  );
+  
+  return $schema;
+}
+
+function buy_file_install() {
+  drupal_install_schema('buy_file');
+  if (!module_exists('private_download')) {
+    drupal_set_message('It is recommended you use the  Private Download 
+    module in order to protect your files.');
+  }
+}
+
+function buy_file_uninstall() {
+  drupal_uninstall_schema('buy_file');
+  variable_del('buy_file_file_directory');
+  variable_del('file_cost');
+  variable_del('buy_file_repurchase');
+  variable_del('buy_file_has_permission');
+  variable_del('buy_file_thank_you');
+  variable_del('buy_file_no_purchased_download');
+}
+
+?>
