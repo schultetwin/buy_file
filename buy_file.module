@@ -45,14 +45,6 @@ function buy_file_menu() {
     'access arguments' => array('access content'),
     'type' => MENU_CALLBACK,
   );
-  $items['user/%user/file_downloads'] = array(
-    'title' => 'Available Downloads',
-    'page callback' => 'buy_file_thank_you',
-    'page arguments' => array(1),
-    'access callback' => 'user_view_access',
-    'access arguments' => array(1),
-    'type' => MENU_LOCAL_TASK,
-  );
   $items['admin/settings/buy-file'] = array(
     'title' => 'Buy File Settings',
     'page callback' => 'drupal_get_form',
@@ -229,7 +221,7 @@ function buy_file_purchase_form($form_state, $fid = NULL) {
   $options['item_name'] = 'File Download: ' . $filename;
   $options['item_number'] = $fid;
   $options['currency'] = 'USD';
-  $options['return_path'] = 'user/' . $user->uid .'/file_downloads';
+  $options['return_path'] = 'user/' . $user->uid .'/downloads';
   $custom = array(
     'uid' => $user->uid,
     'fid' => $fid,
@@ -336,6 +328,13 @@ function buy_file_user($op, &$edit, &$account, $category = NULL) {
   }
 }
 
+function buy_file_views_api() {
+  return array(
+    'api' => 2,
+    'path' => drupal_get_path('module', 'buy_file') . '/includes',
+  );
+}
+
 /**
  * Helpful api function to get all file downloads for a user.
  * 
@@ -363,15 +362,15 @@ function buy_file_get($uid) {
 function buy_file_add($uid,$fid) {
   // Test to see if record already exists
   $files = buy_file_get($uid);
+  $num_down = variable_get('buy_file_number',1);
   if (array_key_exists($fid, $files)) {
-    drupal_set_message("UPDATE");
+    $num_down = $num_down + $files[$fid]['downloadable'];
     $sql = 'UPDATE {user_file_download} SET downloadable = %d WHERE uid = %d AND fid = %d';
-    $result = db_query($sql, 1, $uid, $fid);
+    $result = db_query($sql, $num_down, $uid, $fid);
     $method = 'update';
   }else{
-    drupal_set_message("INSERT");
     $sql = 'INSERT INTO {user_file_download} (downloadable, uid, fid) VALUES (%d, %d, %d)';
-    $result = db_query($sql, 1, $uid, $fid);
+    $result = db_query($sql, $num_down, $uid, $fid);
     $method = 'insert';
   }
   if (!$result) {
@@ -388,8 +387,10 @@ function buy_file_add($uid,$fid) {
  * return null;
  */
 function buy_file_remove($uid,$fid) {
+  $files = buy_file_get($uid);
+  $num_down = $files[$fid]['downloadable'] - 1;
   $sql = 'UPDATE {user_file_download} SET downloadable = %d WHERE uid = %d AND fid = %d';
-  $result = db_query($sql,0,$uid,$fid);
+  $result = db_query($sql,$num_down,$uid,$fid);
   if (!$result) {
     drupal_set_message('Error removing user access to file','error');
   }

@@ -13,6 +13,12 @@ function buy_file_admin_form($form_state) {
     '#field_prefix' => '$',
     '#size' => 4,
   );
+  $form['buy_file_number'] = array(
+    '#type' => 'textfield',
+    '#title' => t('Default Number of Downloads'),
+    '#default_value' => variable_get('buy_file_number',1),
+    '#size' => 2,
+  );
   $form['buy_file_file_directory'] = array(
     '#type' => 'textfield',
     '#title' => t('Directory of files'),
