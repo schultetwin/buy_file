@@ -239,7 +239,7 @@ function buy_file_purchase_form($form_state, $fid = NULL) {
   );
   
   $form['custom']['#value'] = $custom;
-  $form['amount_display']['#value'] = '<p>' . t('This file cost $@price. You must return to this website to download the purchased file.', array(
+  $form['amount_display']['#value'] = '<p>' . t('Thank you for your business. This file cost $@price. You must return to this website to download the purchased file.', array(
           '@price' => $price)) . '</p>';
   return $form;
 }
