@@ -166,7 +166,7 @@ function buy_file_purchase_form($form_state, $fid = NULL) {
       '@url' => url('user/login', array('query' => 'destination=purchase/files/' . $fid, 'absolute' => TRUE)), 
       '@reg' => url('user/register', array('query' => 'destination=purchase/files/' . $fid, 'absolute' => TRUE))
     );
-    drupal_set_message(t('You must <a href="@url">login</a> or <a href="@reg">register</a> to download a file', $message_args));
+    drupal_set_message(t('You must ' . l(t('login'),'/user/login', array( 'query' => drupal_get_destination()))) . t(' or ' . l(t('register'), '/user/register', array( 'query' => drupal_get_destination()))) t('to download a file'));
     return;
   }
   
