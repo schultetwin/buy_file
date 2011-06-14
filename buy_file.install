@@ -52,5 +52,4 @@ function buy_file_uninstall() {
   variable_del('buy_file_has_permission');
   variable_del('buy_file_thank_you');
   variable_del('buy_file_no_purchased_download');
-  variable_del('buy_file_number');
 }
