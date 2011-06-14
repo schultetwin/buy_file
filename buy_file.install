@@ -40,8 +40,7 @@ function buy_file_install() {
     drupal_set_message(t('It is recommended you use the  Private Download 
     module in order to protect your files.'));
   }
-  db_query('UPDATE {system} SET weight = 50 WHERE name = "%s"', 'buy_file');
-  drupal_set_message(t('You must configure buy file' . l(t('here'), 'admin/settings/buy-file',));
+  drupal_set_message(t('You must configure buy file <a href=@url>here</a>', array('@url' => base_path() . 'admin/settings/buy-file')));
 }
 
 function buy_file_uninstall() {

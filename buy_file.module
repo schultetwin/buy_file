@@ -166,7 +166,11 @@ function buy_file_purchase_form($form_state, $fid = NULL) {
       '@url' => url('user/login', array('query' => 'destination=purchase/files/' . $fid, 'absolute' => TRUE)), 
       '@reg' => url('user/register', array('query' => 'destination=purchase/files/' . $fid, 'absolute' => TRUE))
     );
+<<<<<<< HEAD:buy_file.module
     drupal_set_message(t('You must ' . l(t('login'),'/user/login', array( 'query' => drupal_get_destination())) . ' or ' . l(t('register'), '/user/register', array( 'query' => drupal_get_destination()) . 'to download a file')));
+=======
+    drupal_set_message(t('You must <a href="@url">login</a> or <a href="@reg">register</a> to download a file', $message_args));
+>>>>>>> dd78dce... Adding proper l() to drupal_set_message:buy_file.module
     return;
   }
   
