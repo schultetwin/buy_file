@@ -1,6 +1,6 @@
 <?php
 /**
- * Implementation of hook_perm
+ * Implementation of hook_perm()
  * Note all purchasable files will allow to access all purchasable files
  * 
  * 
@@ -10,7 +10,7 @@ function buy_file_perm() {
 }
 
 /**
- * Implementation of hook_menu
+ * Implementation of hook_menu()
  * 
  * Defines menu item for form from which to download files. All
  * files will redirect to this form if in the proper directory.
@@ -68,7 +68,7 @@ function buy_file_lm_paypal_ipn($ipn) {
   $custom = unserialize($custom);
   $uid = $custom['uid'];
   $fid = $custom['fid'];
-  buy_file_add($uid,$fid);
+  buy_file_add($uid, $fid);
   return TRUE;
 }
 
@@ -96,10 +96,10 @@ function buy_file_menu_alter(&$items) {
 
 function buy_file_select_file_form($form_state = array()) {
   $options = array();
-  $path = variable_get('buy_file_file_directory','');
+  $path = variable_get('buy_file_file_directory', '');
   if ($path) {
     $sql = 'SELECT fid,filename,filepath FROM {files} WHERE filepath LIKE "%%%s%%"';
-    $result = db_query($sql,$path);
+    $result = db_query($sql, $path);
   }else{
     $sql = 'SELECT fid,filename,filepath FROM {files}';
     $result = db_query($sql);
@@ -179,38 +179,38 @@ function buy_file_purchase_form($form_state, $fid = NULL) {
   
   // If price is not set, do not build form. Price must first be set
   // Display error for admin.
-  if (!variable_get('file_cost','')) {
+  if (!variable_get('file_cost', '')) {
     if (user_access('administer buy file')) {
       drupal_set_message(t('You must set a price <a href="@url">here</a>', array('@url' => url('admin/settings/buy-files', array('absolute' => TRUE)))), 'error');
     }else{
-      drupal_set_message(t('Proper settings have not yet been configured for buy file, please contact a site admin'),'error');
+      drupal_set_message(t('Proper settings have not yet been configured for buy file, please contact a site admin'), 'error');
     }
     return;
   }
   
   // SQL for building filepath and  file name for file.
   $sql = 'SELECT filepath,filename FROM {files} WHERE fid = %d';
-  $result = db_query($sql,$fid);
+  $result = db_query($sql, $fid);
   $file = db_fetch_object($result);
   $filepath = file_create_path($file->filepath);
   
   // Don't allow user to accidentally download a file twice. If they have
   // paid for the file, but not download it yet, allow them to download it.
-  if (buy_file_downloadable($user->uid,$fid)) {
-    $output = '<p>' . variable_get('buy_file_repurchase',t('You have already bought this file, but have not yet downloaded it.')) . '</p>';
+  if (buy_file_downloadable($user->uid, $fid)) {
+    $output = '<p>' . variable_get('buy_file_repurchase', t('You have already bought this file, but have not yet downloaded it.')) . '</p>';
     $output .= '<p>' . l('Download here', $filepath) . '</p>';
     drupal_set_message($output,'warning');
   }
   
   // If user has permissions to download all files, let them know that
   // and provide helpful error
-  if (user_access('access all purchasable files',$user)) {
-    $output = '<p>' . variable_get('buy_file_has_permission',t('You have subscribed to our site and may download this file for free.')) . '</p>';
+  if (user_access('access all purchasable files', $user)) {
+    $output = '<p>' . variable_get('buy_file_has_permission', t('You have subscribed to our site and may download this file for free.')) . '</p>';
     $output .= '<p>' . l('Download here', $filepath) . '</p>';
-    drupal_set_message($output,'warning');
+    drupal_set_message($output, 'warning');
   }
   $filename = $file->filename;
-  $price = variable_get('file_cost',1);
+  $price = variable_get('file_cost', 1);
   
   // Set parameters to send to paypal.com. Documentation available from
   // lm_paypal module.
@@ -245,31 +245,8 @@ function buy_file_purchase_form($form_state, $fid = NULL) {
 }
 
 /**
- * Page callback for a thank you page.
+ * Implementation of hook_file_download()
  * 
- * return $output
- * 
- * THIS SHOULD BE UPDATED TO INCLUDE VIEWS!!!!
- */
-function buy_file_thank_you($user) {
-  $uid = $user->uid;
-  $output = '<p>'. variable_get('buy_file_thank_you',t('Thank you for buying from us')) .'</p>';
-  $files = buy_file_get($uid);
-  foreach($files as $fid => $fileinfo) {
-    if ($fileinfo['downloadable'] == 1) {
-      $path = file_create_path($fileinfo['filepath']);
-      $output .= '<p>' . t('You may download your file, @name, <a href="@url">here</a>.', array('@name' => t($fileinfo['filename']), '@url' => url($path))) .'</p>';
-    }
-  }
-  if (!$path) {
-    $output = '<p>' . variable_get('buy_file_no_purchased_download',t('You have no current available downloads')) . '</p>';
-  }
-  
-  return $output;
-}
-
-/**
- * Implementation of hook_file_download
  * Determine if file is in the proper directory.
  * If it is, use a function to check to see if user can download it..
  * If not, redirect to buy_file form.
@@ -290,8 +267,8 @@ function buy_file_file_download($filepath) {
   if ($file) {
     $fid = $file->fid;
     if ($user->uid) {
-      if (buy_file_downloadable($user->uid,$fid)) {
-        buy_file_remove($user->uid,$fid);
+      if (buy_file_downloadable($user->uid, $fid)) {
+        buy_file_remove($user->uid, $fid);
         return array(
           'Content-Type: ' . $file->filemime,
           'Content-Length: ' . $file->filesize,
@@ -311,7 +288,7 @@ function buy_file_file_download($filepath) {
 }
 
 /**
- * Implementation of hook_file_user
+ * Implementation of hook_file_user()
  * 
  * If user is deleted we should delete all file downloads from that user.
  */
@@ -320,7 +297,7 @@ function buy_file_user($op, &$edit, &$account, $category = NULL) {
     case delete:
       $sql = 'DELETE FROM {user_file_download} WHERE uid = %d';
       $uid = $account->uid;
-      $result = db_query($sql,$uid);
+      $result = db_query($sql, $uid);
       if (!$result) {
       	drupal_set_message('Error deleting file download history','error');
       }
@@ -359,7 +336,7 @@ function buy_file_get($uid) {
  * 
  * return NULL
  */
-function buy_file_add($uid,$fid) {
+function buy_file_add($uid, $fid) {
   // Test to see if record already exists
   $files = buy_file_get($uid);
   $num_down = variable_get('buy_file_number',1);
@@ -386,7 +363,7 @@ function buy_file_add($uid,$fid) {
  * 
  * return null;
  */
-function buy_file_remove($uid,$fid) {
+function buy_file_remove($uid, $fid) {
   $files = buy_file_get($uid);
   $num_down = $files[$fid]['downloadable'] - 1;
   $sql = 'UPDATE {user_file_download} SET downloadable = %d WHERE uid = %d AND fid = %d';
@@ -404,9 +381,9 @@ function buy_file_remove($uid,$fid) {
  * 
  * return TRUE/FALSE
  */
-function buy_file_downloadable($uid,$fid) {
+function buy_file_downloadable($uid, $fid) {
   $sql = 'SELECT downloadable FROM {user_file_download} WHERE uid = %d and fid = %d';
-  $result = db_query($sql,$uid,$fid);
+  $result = db_query($sql, $uid, $fid);
   $down = db_fetch_object($result);
   if ($down->downloadable) {
     return TRUE;
